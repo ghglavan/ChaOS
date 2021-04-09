@@ -73,7 +73,8 @@ pub unsafe extern "C" fn PendSV() {
         CURRENT_TCB_INDEX = (CURRENT_TCB_INDEX + 1) % TASKS;
         let next_tcb = &mut TCBS[CURRENT_TCB_INDEX];
      
-        asm!("mrs       r0, PSP",
+        asm!(
+             "mrs       r0, PSP",
              "tst       lr, #0x10",
              "it        eq",
              "vstmdbeq  r0!, {{s16-s31}}",
@@ -93,10 +94,39 @@ pub unsafe extern "C" fn PendSV() {
     }
 }
 
+fn sv_call_handler(stack: *mut u32) {
+    
+    let asdasd = unsafe {
+        *(*stack.offset(6) as *mut u8).offset(-2)
+    };
+
+    loop {
+        continue;
+    } 
+}
+
+#[export_name = "SVCall"]
+pub unsafe extern "C" fn SVCall() {
+    unsafe {
+        asm!(
+             "tst       lr, #4",
+             "ite       eq",
+             "mrseq     r0, msp",
+             "mrsne     r0, psp",
+             "b         {}",
+             sym sv_call_handler
+             );
+        }
+}
+
 fn task0() {
     
     loop {
-        unsafe {TASK0_COUNTER += 1;} 
+        unsafe {
+            TASK0_COUNTER += 1;
+            asm!("svc #9");
+        } 
+        
         continue;
     }
 }
@@ -138,11 +168,10 @@ fn setup() {
         TCB_STACK1[TCB_STACK_SIZE - 17] = 0x3; // initial CONTROL: unprivileged, PSP, no fp
         TCB_STACK2[TCB_STACK_SIZE - 17] = 0x3; // initial CONTROL: unprivileged, PSP, no fp
 
-        
         TCB_STACK0[TCB_STACK_SIZE - 18] = 0xFFFFFFFD;
         TCB_STACK1[TCB_STACK_SIZE - 18] = 0xFFFFFFFD;
         TCB_STACK2[TCB_STACK_SIZE - 18] = 0xFFFFFFFD;
-
+        
         CURRENT_TCB_INDEX = 0;
        
 	}
