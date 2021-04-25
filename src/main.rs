@@ -33,6 +33,11 @@ struct TaskControlBlock {
     stack_ptr: *mut u32, 
 }
 
+// 0 if the syscall was generated from an unprivileged context
+// 1 otherwise
+// this should be used in svc handler to know where to return to
+static mut PRIVILEGED_SYSCALL: u32 = 0;
+
 static mut TASK0_COUNTER: u32 = 0;
 static mut TASK1_COUNTER: u32 = 0;
 static mut TASK2_COUNTER: u32 = 0;
@@ -94,27 +99,81 @@ pub unsafe extern "C" fn PendSV() {
     }
 }
 
-fn sv_call_handler(stack: *mut u32) {
-    
-    let asdasd = unsafe {
-        *(*stack.offset(6) as *mut u8).offset(-2)
-    };
-
-    loop {
-        continue;
-    } 
+#[derive(Copy, Clone)]
+enum Syscalls {
+    Sleep = 0,
+    Unknown,
 }
 
+impl Syscalls {
+    fn val(&self) -> u8 {
+        *self as u8
+    }
+}
+
+impl From<u8> for Syscalls {
+    fn from(val: u8) -> Self {
+        match val {
+            0 => Syscalls::Sleep,
+            _ => Syscalls::Unknown,
+        }
+    }
+}
+
+fn reset_timer() {
+    let mut syst = Peripherals::take().unwrap().SYST;
+    syst.set_clock_source(SystClkSource::Core);
+    
+    let reload = match syst.get_ticks_per_10ms() {
+        0 => QUANTA_US * (BUS_FREQ / US_SCALER),
+        x => x
+    };
+    syst.set_reload(reload - 1);
+    syst.clear_current();
+    syst.enable_counter();
+    syst.enable_interrupt();
+}
+
+fn do_sleep_syscall() {
+    cortex_m::peripheral::SCB::set_pendsv();
+    reset_timer();
+}
+
+fn sv_call_handler(stack: *mut u32) {
+    
+    let syscall_code: Syscalls = unsafe {
+        *(*stack.offset(6) as *mut u8).offset(-2)
+    }.into();
+
+    match syscall_code {
+        Syscalls::Sleep => {
+           do_sleep_syscall();
+        },
+        Syscalls::Unknown => {}
+    }
+}
+
+// we dont use the #[exception] macro because we want a clear stack
+// and the trampoline will mess with it 
 #[export_name = "SVCall"]
 pub unsafe extern "C" fn SVCall() {
     unsafe {
         asm!(
-             "tst       lr, #4",
-             "ite       eq",
-             "mrseq     r0, msp",
-             "mrsne     r0, psp",
-             "b         {}",
-             sym sv_call_handler
+             "cmp       lr, 0xfffffff9",
+             "bne       privileged",
+             "mov       r0, #0",
+             "ldr       r1, ={1}",
+             "str       r0, [r1]",
+             "mrs       r0, psp",
+             "b         {0}",
+             "privileged:",
+             "mov       r0, #1",
+             "ldr       r1, ={1}",
+             "str       r0, [r1]",
+             "mrs       r0, msp",
+             "b         {0}",
+             sym sv_call_handler,
+             sym PRIVILEGED_SYSCALL
              );
         }
 }
@@ -182,14 +241,8 @@ fn setup() {
     }
 
     // setup  systick
-    let mut syst = Peripherals::take().unwrap().SYST;
-    syst.set_clock_source(SystClkSource::Core);
-    let reload = QUANTA_US * (BUS_FREQ / US_SCALER);
-    syst.set_reload(reload - 1);
-    syst.clear_current();
-    syst.enable_counter();
-    syst.enable_interrupt();
-    
+    reset_timer();
+
     unsafe {
         let current_tcb = &TCBS[CURRENT_TCB_INDEX];
          
