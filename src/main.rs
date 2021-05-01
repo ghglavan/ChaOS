@@ -13,10 +13,10 @@ pub use stm32f3xx_hal::{
 
 use core::{cell::RefCell, ops::DerefMut};
 
-use cortex_m::asm;
 use cortex_m::interrupt::{self, Mutex};
 use cortex_m::peripheral::{syst::SystClkSource, SYST};
 use cortex_m::Peripherals;
+use cortex_m::{asm, register};
 use cortex_m_rt::{entry, exception};
 use cortex_m_semihosting::*;
 use panic_semihosting as _;
@@ -34,11 +34,6 @@ struct TaskControlBlock {
 }
 
 static G_SYST: Mutex<RefCell<Option<SYST>>> = Mutex::new(RefCell::new(None));
-
-// 0 if the syscall was generated from an unprivileged context
-// 1 otherwise
-// this should be used in svc handler to know where to return to
-static mut PRIVILEGED_SYSCALL: u32 = 0;
 
 static mut TASK0_COUNTER: u32 = 0;
 static mut TASK1_COUNTER: u32 = 0;
@@ -110,7 +105,8 @@ pub unsafe extern "C" fn PendSV() {
 
 #[derive(Copy, Clone)]
 enum Syscalls {
-    Sleep = 0,
+    Setup = 0,
+    Sleep = 1,
     Unknown,
 }
 
@@ -123,7 +119,8 @@ impl Syscalls {
 impl From<u8> for Syscalls {
     fn from(val: u8) -> Self {
         match val {
-            0 => Syscalls::Sleep,
+            0 => Syscalls::Setup,
+            1 => Syscalls::Sleep,
             _ => Syscalls::Unknown,
         }
     }
@@ -151,72 +148,7 @@ fn do_sleep_syscall() {
     do_context_switch();
     reset_timer();
 }
-
-fn sv_call_handler(stack: *mut u32) {
-    let syscall_code: Syscalls = unsafe { *(*stack.offset(6) as *mut u8).offset(-2) }.into();
-
-    match syscall_code {
-        Syscalls::Sleep => {
-            do_sleep_syscall();
-        }
-        Syscalls::Unknown => {}
-    }
-}
-
-// we dont use the #[exception] macro because we want a clear stack
-// and the trampoline will mess with it
-#[export_name = "SVCall"]
-pub unsafe extern "C" fn SVCall() {
-    unsafe {
-        asm!(
-            "cmp       lr, 0xfffffff9",
-            "bne       privileged",
-            "mov       r0, #0",
-            "ldr       r1, ={1}",
-            "str       r0, [r1]",
-            "mrs       r0, psp",
-            "b         {0}",
-            "privileged:",
-            "mov       r0, #1",
-            "ldr       r1, ={1}",
-            "str       r0, [r1]",
-            "mrs       r0, msp",
-            "bl        {0}",
-            sym sv_call_handler,
-            sym PRIVILEGED_SYSCALL
-        );
-    }
-}
-
-fn task0() {
-    loop {
-        unsafe {
-            TASK0_COUNTER += 1;
-            asm!("svc #9");
-        }
-        continue;
-    }
-}
-
-fn task1() {
-    loop {
-        unsafe {
-            TASK1_COUNTER += 1;
-        }
-        continue;
-    }
-}
-
-fn task2() {
-    loop {
-        unsafe {
-            TASK2_COUNTER += 1;
-        }
-        continue;
-    }
-}
-
-fn setup() {
+fn do_setup_syscall() {
     interrupt::free(|cs| {
         G_SYST
             .borrow(cs)
@@ -256,21 +188,97 @@ fn setup() {
 
     unsafe {
         let current_tcb = &TCBS[CURRENT_TCB_INDEX];
+        let psp = current_tcb.stack_ptr.offset(10);
         let ctrl = 0x3;
         asm!(
         "msr psp, {0}",
         "msr control, {1}",
-        in(reg) current_tcb.stack_ptr,
-        in(reg) ctrl
+        "isb",
+        "ldr lr, ={2}",
+        "bx lr",
+        in(reg) psp,
+        in(reg) ctrl,
+        const 0xFFFFFFFDu32
         );
     }
+}
+#[inline(always)]
+fn sv_call_handler(stack: *mut u32) {
+    unsafe {
+        let stack_pc = stack.offset(6);
+        let code = (*stack_pc) as *mut u8;
+        let offset = code.offset(-2);
+        let syscall_code: Syscalls = (*offset).into();
 
-    task0();
+        let privileged = if stack == register::psp::read() as *mut u32 {
+            false
+        } else {
+            true
+        };
+
+        match syscall_code {
+            Syscalls::Setup => {
+                if !privileged {
+                    return;
+                }
+
+                do_setup_syscall();
+            }
+            Syscalls::Sleep => {
+                do_sleep_syscall();
+            }
+            Syscalls::Unknown => {}
+        }
+    }
+}
+
+// we dont use the #[exception] macro because we want a clear stack
+// and the trampoline will mess with it
+#[export_name = "SVCall"]
+pub unsafe extern "C" fn SVCall() {
+    asm!(
+        "tst       lr, #4",
+        "ite       eq",
+        "mrseq     r0, msp",
+        "mrsne     r0, psp",
+        "bl         {}",
+        sym sv_call_handler,
+    );
+}
+
+fn task0() {
+    loop {
+        unsafe {
+            TASK0_COUNTER += 1;
+            asm!("svc #1");
+        }
+        continue;
+    }
+}
+
+fn task1() {
+    loop {
+        unsafe {
+            TASK1_COUNTER += 1;
+        }
+        continue;
+    }
+}
+
+fn task2() {
+    loop {
+        unsafe {
+            TASK2_COUNTER += 1;
+        }
+        continue;
+    }
 }
 
 #[entry]
 fn main() -> ! {
-    setup();
+    unsafe {
+        asm!("svc #0");
+    }
 
     loop {
         continue;
