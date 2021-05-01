@@ -13,12 +13,13 @@ pub use stm32f3xx_hal::{
 
 use core::{cell::RefCell, ops::DerefMut};
 
+use cortex_m::asm;
 use cortex_m::interrupt::{self, Mutex};
 use cortex_m::peripheral::{syst::SystClkSource, SYST};
 use cortex_m::Peripherals;
 use cortex_m_rt::{entry, exception};
 use cortex_m_semihosting::*;
-use panic_semihosting as _; // you can put a breakpoint on `rust_begin_unwind` to catch panicuse cortex_m::asm;
+use panic_semihosting as _;
 
 const TASKS: usize = 3;
 const TCB_STACK_SIZE: usize = 300;
@@ -61,31 +62,33 @@ fn SysTick() {
 #[inline(always)]
 fn do_context_switch() {
     unsafe {
-        let prev_tcb = &mut TCBS[CURRENT_TCB_INDEX];
+        let mut prev_stack = &mut TCBS[CURRENT_TCB_INDEX].stack_ptr;
         CURRENT_TCB_INDEX = (CURRENT_TCB_INDEX + 1) % TASKS;
-        let next_tcb = &mut TCBS[CURRENT_TCB_INDEX];
+        let next_stack = &mut TCBS[CURRENT_TCB_INDEX].stack_ptr;
+
         asm!(
-         "mrs       r0, PSP",
-         "tst       lr, #0x10",
-         "it        eq",
-         "vstmdbeq  r0!, {{s16-s31}}",
-         "mov       r2, lr",
-         "mrs       r3, control",
-         "stmdb     r0!, {{r2-r11}}",
-         "ldmia     r1!, {{r2-r11}}",
-         "mov       lr, r2",
-         "msr       control, r3",
-         "isb",
-         "tst       lr, #0x10",
-         "it        eq",
-         "vldmiaeq  r1!, {{s16-s31}}",
-         "msr       psp, r1",
-         inout("r0") prev_tcb.stack_ptr, inout("r1") next_tcb.stack_ptr
+            "mrs       r0, PSP",
+            "tst       lr, #0x10",
+            "it        eq",
+            "vstmdbeq  r0!, {{s16-s31}}",
+            "mov       r2, lr",
+            "mrs       r3, control",
+            "stmdb     r0!, {{r2-r11}}",
+            "ldmia     r1!, {{r2-r11}}",
+            "mov       lr, r2",
+            "msr       control, r3",
+            "isb",
+            "tst       lr, #0x10",
+            "it        eq",
+            "vldmiaeq  r1!, {{s16-s31}}",
+            "msr       psp, r1",
+            out("r0") *prev_stack,
+            in("r1") *next_stack
         );
     }
 }
 
-// wo dont use the classic exception here because we ned the lr in order to check the
+// wo dont use the classic exception here because we need the lr in order to check the
 // fp status of the task. Using the #[exception] macro will generate
 //
 // #[doc(hidden)]
@@ -102,29 +105,7 @@ fn do_context_switch() {
 // 'tst  lr, #0x10' will give us a bogus value because it uses the trampoline lr
 #[export_name = "PendSV"]
 pub unsafe extern "C" fn PendSV() {
-    unsafe {
-        let prev_tcb = &mut TCBS[CURRENT_TCB_INDEX];
-        CURRENT_TCB_INDEX = (CURRENT_TCB_INDEX + 1) % TASKS;
-        let next_tcb = &mut TCBS[CURRENT_TCB_INDEX];
-        asm!(
-         "mrs       r0, PSP",
-         "tst       lr, #0x10",
-         "it        eq",
-         "vstmdbeq  r0!, {{s16-s31}}",
-         "mov       r2, lr",
-         "mrs       r3, control",
-         "stmdb     r0!, {{r2-r11}}",
-         "ldmia     r1!, {{r2-r11}}",
-         "mov       lr, r2",
-         "msr       control, r3",
-         "isb",
-         "tst       lr, #0x10",
-         "it        eq",
-         "vldmiaeq  r1!, {{s16-s31}}",
-         "msr       psp, r1",
-         inout("r0") prev_tcb.stack_ptr, inout("r1") next_tcb.stack_ptr
-        );
-    }
+    do_context_switch();
 }
 
 #[derive(Copy, Clone)]
@@ -165,9 +146,10 @@ fn reset_timer() {
     });
 }
 
+#[inline(always)]
 fn do_sleep_syscall() {
-    reset_timer();
     do_context_switch();
+    reset_timer();
 }
 
 fn sv_call_handler(stack: *mut u32) {
@@ -187,21 +169,21 @@ fn sv_call_handler(stack: *mut u32) {
 pub unsafe extern "C" fn SVCall() {
     unsafe {
         asm!(
-        "cmp       lr, 0xfffffff9",
-        "bne       privileged",
-        "mov       r0, #0",
-        "ldr       r1, ={1}",
-        "str       r0, [r1]",
-        "mrs       r0, psp",
-        "b         {0}",
-        "privileged:",
-        "mov       r0, #1",
-        "ldr       r1, ={1}",
-        "str       r0, [r1]",
-        "mrs       r0, msp",
-        "b         {0}",
-        sym sv_call_handler,
-        sym PRIVILEGED_SYSCALL
+            "cmp       lr, 0xfffffff9",
+            "bne       privileged",
+            "mov       r0, #0",
+            "ldr       r1, ={1}",
+            "str       r0, [r1]",
+            "mrs       r0, psp",
+            "b         {0}",
+            "privileged:",
+            "mov       r0, #1",
+            "ldr       r1, ={1}",
+            "str       r0, [r1]",
+            "mrs       r0, msp",
+            "bl        {0}",
+            sym sv_call_handler,
+            sym PRIVILEGED_SYSCALL
         );
     }
 }
@@ -210,7 +192,7 @@ fn task0() {
     loop {
         unsafe {
             TASK0_COUNTER += 1;
-            //asm!("svc #9");
+            asm!("svc #9");
         }
         continue;
     }
@@ -265,7 +247,7 @@ fn setup() {
             TCB_STACK0[TCB_STACK_SIZE - 18] = 0xFFFFFFFD;
             TCB_STACK1[TCB_STACK_SIZE - 18] = 0xFFFFFFFD;
             TCB_STACK2[TCB_STACK_SIZE - 18] = 0xFFFFFFFD;
-            CURRENT_TCB_INDEX = 1;
+            CURRENT_TCB_INDEX = 0;
         }
     });
 
