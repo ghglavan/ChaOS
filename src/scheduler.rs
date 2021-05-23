@@ -2,6 +2,7 @@ use crate::task;
 
 pub trait Scheduler<const N: usize> {
     fn init_with_tasks(tasks: [task::Task; N], quanta_us: u32) -> Self;
+    fn get_initial_task_regs(&self) -> (*const u32, u32, u32); 
     fn get_switch_pair(&mut self) -> (*mut u32, *const u32);
     fn get_quanta_us(&self) -> u32;
 }
@@ -22,11 +23,7 @@ impl<const N: usize> Scheduler<N> for RRScheduler<N> {
                 let control = task_stack_addr.offset((task.stack_size - 17) as isize);
                 let exc_return = task_stack_addr.offset((task.stack_size - 18) as isize);
 
-                let control_val = if task.privileged {
-                    0x2
-                } else {
-                    0x3
-                };
+                let control_val = task.get_ctrl();
 
                 *xpsr = 0x0100_0000;
                 *pc = task.fn_addr;
@@ -42,14 +39,22 @@ impl<const N: usize> Scheduler<N> for RRScheduler<N> {
         RRScheduler {tasks, current_task_idx, quanta_us}
     }
 
-    fn get_switch_pair(&mut self) -> (*mut u32, *const u32) {
-        unsafe {
-            let mut current_stack = self.tasks[self.current_task_idx].stack_addr as *mut u32;
-            self.current_task_idx = (self.current_task_idx + 1 ) % self.tasks.len();
-            let next_stack = self.tasks[self.current_task_idx].stack_addr as *mut u32;
+    fn get_initial_task_regs(&self) -> (*const u32, u32, u32) {
+        let task = &self.tasks[self.current_task_idx];
+        let psp = unsafe { (task.stack_addr as *const u32).offset(10) };
+        let ctrl = task.get_ctrl();
+        let exc_return = 0xFFFFFFFD;
 
-            (current_stack, next_stack)
-        }
+        (psp, ctrl, exc_return)
+    }
+
+    fn get_switch_pair(&mut self) -> (*mut u32, *const u32) {       
+        let mut current_stack = self.tasks[self.current_task_idx].stack_addr as *mut u32;
+        self.current_task_idx = (self.current_task_idx + 1 ) % self.tasks.len();
+        let next_stack = self.tasks[self.current_task_idx].stack_addr as *mut u32;
+
+        (current_stack, next_stack)
+    
     }
 
     fn get_quanta_us(&self) -> u32 {

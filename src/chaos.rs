@@ -20,6 +20,10 @@ impl< S: Scheduler<N>, const N: usize,> Os for ChaOS<S, N> {
     fn get_switch_pair(&mut self) -> (*mut u32, *const u32) {
         self.scheduler.get_switch_pair()
     }
+
+    fn get_initial_task_regs(&self) -> (*const u32, u32, u32) {
+        self.scheduler.get_initial_task_regs()
+    }
 }
 
 impl<S: Scheduler<N>, const N: usize> ChaOS<S, N> {

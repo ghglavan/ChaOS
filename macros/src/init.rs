@@ -15,7 +15,7 @@ pub fn init(tasks: &Vec<task::Task>, scheduler: syn::Path, quanta_us: syn::LitIn
         quote! { 
             ::chaos::task::Task {
                 stack_size: #stack_size as u32,
-                stack_addr: #stack_addr as u32,
+                stack_addr: #stack_addr.as_ptr() as u32,
                 fn_addr: #fn_addr as u32,
                 privileged: #privileged,
                 fp: #fp,
@@ -29,14 +29,19 @@ pub fn init(tasks: &Vec<task::Task>, scheduler: syn::Path, quanta_us: syn::LitIn
         fn main() -> ! {
             use cortex_m::interrupt::{self, Mutex};
 
-            let tasks = [#(#tasks_init),*];
+            let tasks = unsafe { [#(#tasks_init),*] };
             let sched: #scheduler<#n_tasks> = #scheduler::<#n_tasks>::init_with_tasks(tasks, #quanta_us);
-            __CHAOS_OS_OBJ = Some(::chaos::chaos::ChaOS::<#scheduler<#n_tasks>, #n_tasks>::init(sched, #ahb_freq));
+            
+            unsafe {
+                __CHAOS_OS_OBJ = Some(::chaos::chaos::ChaOS::<#scheduler<#n_tasks>, #n_tasks>::init(sched, #ahb_freq));
+            }
 
             interrupt::free(|cs| {
-                chaos::os::OS
-                    .borrow(cs)
-                    .replace(__CHAOS_OS_OBJ.as_mut().unwrap() as *mut dyn ::chaos::os::Os);
+                unsafe {
+                    chaos::os::OS
+                        .borrow(cs)
+                        .replace(Some(__CHAOS_OS_OBJ.as_mut().unwrap() as *mut dyn ::chaos::os::Os));
+                }
             });
 
             unsafe {

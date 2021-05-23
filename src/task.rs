@@ -9,7 +9,11 @@ pub struct Task {
 }
 
 impl Task {
-    fn new(stack_size: u32, stack_addr: u32, fn_addr: u32, privileged: bool, fp: bool) -> Self {
-        return Task {stack_size, stack_addr, fn_addr, privileged, fp}
+    pub fn get_ctrl(&self) -> u32 {
+        if self.privileged {
+            0x2
+        } else {
+            0x3
+        }
     }
 }
