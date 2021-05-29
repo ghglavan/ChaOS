@@ -29,7 +29,6 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
                         {
                             let mut task = match attr.parse_args::<task::Task>() {
                                 Ok(t) => {
-                                    println!("got args stack_size: {}", t.stack_size);
                                     t
                                 }
                                 Err(e) => return e.into_compile_error().into(),
@@ -79,16 +78,6 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
     (quote! {
         use ::chaos::scheduler::Scheduler;
         use ::chaos::os::Os;
-
-        #[derive(Copy, Clone)]
-        #[repr(C)]
-        struct TaskControlBlock {
-            stack_ptr: *mut u32,
-        }
-
-        static mut TCBS: [TaskControlBlock; #n_tasks] = [TaskControlBlock {
-            stack_ptr: 0 as *mut u32,
-        }; #n_tasks];
 
         #(#stacks)*
 

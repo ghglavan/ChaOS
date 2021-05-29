@@ -49,6 +49,7 @@ fn handle_sleep_call() {
     });
 }
 
+#[inline(always)]
 pub fn sv_call_handler(stack: *mut u32) {
     unsafe {
         let stack_pc = stack.offset(6);

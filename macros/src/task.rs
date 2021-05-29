@@ -9,7 +9,9 @@ pub struct Task {
 
 impl Task {
     pub fn stack_name(&self) -> syn::Ident {
-        quote::format_ident!("__{}_stack", self.name.clone().unwrap())
+        let mut name_upper = self.name.clone().unwrap().to_string();
+        name_upper.make_ascii_uppercase();
+        quote::format_ident!("__{}_STACK", name_upper)
     }
 
     pub fn stack_size(&self) -> syn::LitInt {
