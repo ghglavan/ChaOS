@@ -13,13 +13,13 @@ pub fn init(tasks: &Vec<task::Task>, scheduler: syn::Path, quanta_us: syn::LitIn
         let fp = t.fp();
 
         quote! { 
-            ::chaos::task::Task {
-                stack_size: #stack_size as u32,
-                stack_addr: #stack_addr.as_ptr() as u32,
-                fn_addr: #fn_addr as u32,
-                privileged: #privileged,
-                fp: #fp,
-            }
+            ::chaos::task::Task::new(
+                #stack_size as u32,
+                #stack_addr.as_ptr() as u32,
+                #fn_addr as u32,
+                #privileged,
+                #fp,
+            )
         }
     });
 
@@ -45,6 +45,7 @@ pub fn init(tasks: &Vec<task::Task>, scheduler: syn::Path, quanta_us: syn::LitIn
             });
 
             unsafe {
+                interrupt::enable();
                 asm!("svc #0");
             }
 

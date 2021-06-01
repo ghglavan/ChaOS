@@ -6,7 +6,6 @@ use quote::quote;
 mod mod_args;
 mod task;
 mod init;
-mod exceptions;
 
 #[proc_macro_attribute]
 pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -73,8 +72,6 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
     let ahb_freq = syn::LitInt::new(&args.ahb_freq.to_string(), proc_macro2::Span::call_site());
     let init = init::init(&tasks, args.scheduler.clone(), quanta_us, ahb_freq);
 
-    let exceptions = exceptions::exceptions();
-
     (quote! {
         use ::chaos::scheduler::Scheduler;
         use ::chaos::os::Os;
@@ -82,8 +79,6 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
         #(#stacks)*
 
         #(#content)*
-        
-        #exceptions
 
         #init
     })
