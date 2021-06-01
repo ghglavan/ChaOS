@@ -28,47 +28,45 @@ impl From<u8> for Syscalls {
 }
 
 fn handle_setup_call() {
+    let mut task_regs = (0 as *const u32, 0, 0);
     interrupt::free(|cs| {
         unsafe {
             (*OS.borrow(cs).borrow_mut().unwrap()).reset_timer();
-
-            let (psp, ctrl, exc_return) = (*OS.borrow(cs).borrow_mut().unwrap()).get_initial_task_regs();
-            asm::do_setup(psp, ctrl, exc_return);
+            task_regs = (*OS.borrow(cs).borrow_mut().unwrap()).get_initial_task_regs();
         }
     });
-
+    let (psp, ctrl, exc_return) = task_regs;
+    asm::do_setup(psp, ctrl, exc_return);
 }
 
 fn handle_sleep_call() {
     interrupt::free(|cs| {
         unsafe {
-            let (prev_stack, next_stack) = (*OS.borrow(cs).borrow_mut().unwrap()).get_switch_pair();
-            asm::do_context_switch(prev_stack, next_stack);
+            cortex_m::peripheral::SCB::set_pendsv();
             (*OS.borrow(cs).borrow_mut().unwrap()).reset_timer();
         }
     });
 }
 
 #[inline(always)]
-pub fn sv_call_handler(stack: *mut u32) {
+pub(crate) fn sv_call_handler(stack: *mut u32) {
     unsafe {
-        let stack_pc = stack.offset(6);
+        // we use 8 if we are working with msp since the call to the SVC handler
+        // will push 2 registers to the stack ...
+        // to fix this we need to be able to define a function inside asm!
+        let offset = if stack == register::psp::read() as *mut u32 {
+            6
+        } else {
+            8
+        };
+
+        let stack_pc = stack.offset(offset);
         let code = (*stack_pc) as *mut u8;
         let offset = code.offset(-2);
         let syscall_code: Syscalls = (*offset).into();
 
-        let privileged = if stack == register::psp::read() as *mut u32 {
-            false
-        } else {
-            true
-        };
-
         match syscall_code {
             Syscalls::Setup => {
-                if !privileged {
-                    return;
-                }
-
                 handle_setup_call();
             }
             Syscalls::Sleep => {
@@ -76,5 +74,12 @@ pub fn sv_call_handler(stack: *mut u32) {
             }
             Syscalls::Unknown => {}
         }
+    }
+}
+
+#[inline(always)]
+pub fn sleep() {
+    unsafe {
+        asm!("svc #1");
     }
 }

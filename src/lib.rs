@@ -8,4 +8,5 @@ pub mod os;
 pub mod chaos;
 pub mod syscalls;
 pub mod asm;
+mod exceptions;
 mod systick;

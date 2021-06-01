@@ -17,7 +17,7 @@ impl< S: Scheduler<N>, const N: usize,> Os for ChaOS<S, N> {
         systick::reset_timer(&mut self.perifs.SYST, self.scheduler.get_quanta_us(), self.ticks_for_10ms);
     }
 
-    fn get_switch_pair(&mut self) -> (*mut u32, *const u32) {
+    fn get_switch_pair(&mut self) -> (&mut task::Task, &task::Task) {
         self.scheduler.get_switch_pair()
     }
 
