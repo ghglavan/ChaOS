@@ -19,16 +19,16 @@ mod chaos {
 }
 ```
 All os related attributes are specified in the os macro. Available attributes:
-* quanta_us: The interval for a SysTick in microseconds (default to 10_000)
-* schdeuler: The cheduler to be used (mandatory)
-* ahb_freq: The frequency of the bus that drives the SysTick (default to 16_000_000 as I only tested for STM32f4DISCOVERY)
+* `quanta_us`: The interval for a SysTick in microseconds (default to 10_000)
+* `schdeuler`: The cheduler to be used (mandatory)
+* `ahb_freq`: The frequency of the bus that drives the SysTick (default to `16_000_000` as I only tested for `STM32f4DISCOVERY`). This is only used if `SYST::get_ticks_per_10ms` returns 0
 
 Inside the mod you can define the tasks that will be scheduled. Available attributes:
-* stack_size: The size of the stack for the task (mandatory)
-* privileged: Flag set the task should run in privileged mode (default disabled)
-* fp: Flag set if the task should start with floating point context enabled (default disabled)
+* `stack_size`: The size of the stack for the task (mandatory)
+* `privileged`: Flag set the task should run in privileged mode (default disabled)
+* `fp`: Flag set if the task should start with floating point context enabled (default disabled)
 
-ChaOS is preemptive, it will construct an array from the provided tasks and will pass it to the schdeuler. At every SysTick
+ChaOS is preemptive, it will construct an array from the provided tasks and will pass it to the scheduler. At every SysTick
 interrupt or sleep system call, the scheduler will decide which task to schedule next and the os will do the context switch
 very similar to the one presented in [The Definitive Guide to ARM Cortex -M3 and Cortex-M4 Processors](#References)
 
