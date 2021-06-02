@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use crate::task;
 
-pub fn init(tasks: &Vec<task::Task>, scheduler: syn::Path, quanta_us: syn::LitInt, ahb_freq: syn::LitInt) -> TokenStream {
+pub fn init(tasks: &[task::Task], scheduler: syn::Path, quanta_us: syn::LitInt, ahb_freq: syn::LitInt) -> TokenStream {
     let n_tasks = syn::LitInt::new(&tasks.len().to_string(), proc_macro2::Span::call_site());
         
     let tasks_init = tasks.iter().map(|t|  {

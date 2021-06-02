@@ -1,5 +1,3 @@
-
-use cortex_m::interrupt;
 use cortex_m::peripheral::{syst::SystClkSource, SYST};
 
 pub fn reset_timer(syst: &mut SYST, quanta_us: u32, ticks_for_10ms: u32) {

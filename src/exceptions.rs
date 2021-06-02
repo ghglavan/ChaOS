@@ -7,6 +7,7 @@ fn SysTick() {
 }
 
 #[export_name = "PendSV"]
+#[allow(non_snake_case)]
 pub unsafe extern "C" fn PendSV() {
     let lr = crate::asm::get_lr();
     interrupt::free(|cs| {
@@ -17,6 +18,7 @@ pub unsafe extern "C" fn PendSV() {
     });
 }
 
+#[allow(non_snake_case)] 
 #[export_name = "SVCall"]
 pub unsafe extern "C" fn SVCall() {
     asm!(

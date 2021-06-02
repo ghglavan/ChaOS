@@ -14,7 +14,7 @@ pub struct RRScheduler<const N: usize> {
 }
 
 impl<const N: usize> Scheduler<N> for RRScheduler<N> {
-    fn init_with_tasks(mut tasks: [task::Task; N], quanta_us: u32) -> Self {
+    fn init_with_tasks(tasks: [task::Task; N], quanta_us: u32) -> Self {
         let current_task_idx = 0;
 
         RRScheduler {tasks, current_task_idx, quanta_us}

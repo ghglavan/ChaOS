@@ -24,7 +24,7 @@ impl syn::parse::Parse for ModArgs {
                 "quanta_us" => quanta_us = input.parse::<syn::LitInt>()?.base10_parse()?,
                 "scheduler" => scheduler = Some(input.parse::<syn::Path>()?),
                 "ahb_freq" => ahb_freq = input.parse::<syn::LitInt>()?.base10_parse()?,
-                _ => return Err(syn::Error::new(key.span(), format!("unknown attr"))),
+                _ => return Err(syn::Error::new(key.span(), "unknown attr".to_string())),
             }
 
             if !input.peek(syn::token::Comma) {
@@ -34,7 +34,7 @@ impl syn::parse::Parse for ModArgs {
         }
 
         if scheduler.is_none() {
-            return Err(syn::Error::new(input.span(), format!("scheduler is mandatory")));
+            return Err(syn::Error::new(input.span(), "scheduler is mandatory".to_string()));
         }
 
         Ok(ModArgs {quanta_us, scheduler: scheduler.unwrap(), ahb_freq})

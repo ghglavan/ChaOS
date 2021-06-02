@@ -51,7 +51,7 @@ impl syn::parse::Parse for Task {
                 }
                 "privileged" => args.privileged = true,
                 "fp" => args.fp = true,
-                _ => return Err(syn::Error::new(key.span(), format!("unknown attr"))),
+                _ => return Err(syn::Error::new(key.span(), "unknown attr".to_string())),
             }
 
             if !input.peek(syn::token::Comma) {
@@ -60,7 +60,7 @@ impl syn::parse::Parse for Task {
         }
 
         args.stack_size =
-            stack_size.ok_or(syn::Error::new(input.span(), "stack_size is mandatory"))?;
+            stack_size.ok_or_else(|| syn::Error::new(input.span(), "stack_size is mandatory"))?;
 
         Ok(args)
     }

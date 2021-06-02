@@ -1,4 +1,3 @@
-use cortex_m::asm;
 use crate::task;
 
 #[inline(always)]

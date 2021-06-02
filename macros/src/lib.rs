@@ -12,7 +12,6 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
     let rest = syn::parse_macro_input!(input as syn::ItemMod);
     let args = syn::parse_macro_input!(args as mod_args::ModArgs);
 
-    let mod_name = rest.ident.clone();
     let mut tasks = Vec::new();
     let mut init_function = None;
 
@@ -66,11 +65,10 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     });
 
-    let n_tasks = syn::LitInt::new(&tasks.len().to_string(), proc_macro2::Span::call_site());
     let content = content.iter();
     let quanta_us = syn::LitInt::new(&args.quanta_us.to_string(), proc_macro2::Span::call_site());
     let ahb_freq = syn::LitInt::new(&args.ahb_freq.to_string(), proc_macro2::Span::call_site());
-    let init = init::init(&tasks, args.scheduler.clone(), quanta_us, ahb_freq);
+    let init = init::init(&tasks, args.scheduler, quanta_us, ahb_freq);
 
     (quote! {
         use ::chaos::scheduler::Scheduler;
