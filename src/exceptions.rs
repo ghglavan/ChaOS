@@ -6,20 +6,29 @@ fn SysTick() {
     cortex_m::peripheral::SCB::set_pendsv();
 }
 
-#[export_name = "PendSV"]
-#[allow(non_snake_case)]
-pub unsafe extern "C" fn PendSV() {
+#[inline(always)]
+pub fn do_pendsv_exception() {
     let lr = crate::asm::get_lr();
+    let mut pair = None;
     interrupt::free(|cs| {
         unsafe {
             let (prev_task, next_task) = (*crate::os::OS.borrow(cs).borrow_mut().unwrap()).get_switch_pair();
-            crate::asm::do_context_switch(prev_task, next_task, lr);
+            pair = Some((prev_task, next_task));
         }
-    });
+    });    
+    let (prev_task, next_task) = pair.unwrap();
+    crate::asm::do_context_switch(prev_task, next_task, lr);
 }
 
-#[allow(non_snake_case)] 
+#[export_name = "PendSV"]
+#[naked]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn PendSV() {
+    do_pendsv_exception();
+}
+
 #[export_name = "SVCall"]
+#[allow(non_snake_case)] 
 pub unsafe extern "C" fn SVCall() {
     asm!(
         "tst       lr, #4",

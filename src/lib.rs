@@ -1,5 +1,7 @@
 #![no_std]
 #![feature(asm)]
+#![feature(global_asm)]
+#![feature(naked_functions)]
 
 pub use chaos_macros::os;
 pub mod scheduler;
