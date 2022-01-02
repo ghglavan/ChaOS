@@ -1,11 +1,16 @@
 use proc_macro::TokenStream;
 
-use syn::spanned::Spanned;
 use quote::quote;
+use syn::spanned::Spanned;
 
+mod init;
 mod mod_args;
 mod task;
-mod init;
+
+enum TaskIdState {
+    Inactive,
+    Active,
+}
 
 #[proc_macro_attribute]
 pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -20,22 +25,52 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
             match item {
                 syn::Item::Fn(f) => {
                     let mut new_attrs = Vec::new();
+                    let mut ids = 0;
+                    let mut task_ids = None;
                     for attr in f.attrs.iter() {
                         if attr
                             .path
                             .is_ident(&syn::Ident::new("task", proc_macro2::Span::call_site()))
                         {
                             let mut task = match attr.parse_args::<task::Task>() {
-                                Ok(t) => {
-                                    t
-                                }
+                                Ok(t) => t,
                                 Err(e) => return e.into_compile_error().into(),
                             };
                             task.name = Some(f.sig.ident.clone());
+
+                            let err = syn::Error::new(
+                                f.span(),
+                                "ids should be specified for all tasks or none",
+                            )
+                            .into_compile_error();
+
+                            if task.id.is_none() {
+                                if let Some(TaskIdState::Active) = task_ids {
+                                    return err.into();
+                                }
+
+                                task.id = Some(ids);
+                                ids += 1;
+                                task_ids = Some(TaskIdState::Inactive);
+                            } else {
+                                if let Some(TaskIdState::Inactive) = task_ids {
+                                    return err.into();
+                                }
+                                task_ids = Some(TaskIdState::Active);
+                            }
+
                             tasks.push(task);
-                        } else if attr.path.is_ident(&syn::Ident::new("init", proc_macro2::Span::call_site())) {
+                        } else if attr
+                            .path
+                            .is_ident(&syn::Ident::new("init", proc_macro2::Span::call_site()))
+                        {
                             if init_function.is_some() {
-                                return syn::Error::new(f.span(), "only one init function should be defined").into_compile_error().into();
+                                return syn::Error::new(
+                                    f.span(),
+                                    "only one init function should be defined",
+                                )
+                                .into_compile_error()
+                                .into();
                             }
 
                             match f.sig.output {
@@ -57,14 +92,6 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
         Vec::new()
     };
 
-    let stacks = tasks.iter().map(|t| {
-        let stack_name = t.stack_name();
-        let stack_size = t.stack_size();
-        quote! {
-            static mut #stack_name: [u32; #stack_size] = [0; #stack_size];
-        }
-    });
-
     let content = content.iter();
     let quanta_us = syn::LitInt::new(&args.quanta_us.to_string(), proc_macro2::Span::call_site());
     let ahb_freq = syn::LitInt::new(&args.ahb_freq.to_string(), proc_macro2::Span::call_site());
@@ -73,8 +100,6 @@ pub fn os(args: TokenStream, input: TokenStream) -> TokenStream {
     (quote! {
         use ::chaos::scheduler::Scheduler;
         use ::chaos::os::Os;
-
-        #(#stacks)*
 
         #(#content)*
 
