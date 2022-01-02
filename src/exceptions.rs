@@ -1,6 +1,8 @@
 use cortex_m::interrupt;
 use cortex_m_rt::exception;
 
+use crate::task;
+
 #[exception]
 fn SysTick() {
     cortex_m::peripheral::SCB::set_pendsv();
@@ -9,13 +11,22 @@ fn SysTick() {
 #[inline(always)]
 pub fn do_pendsv_exception() {
     let lr = crate::asm::get_lr();
-    let mut pair = None;
-    interrupt::free(|cs| unsafe {
-        let (prev_task, next_task) =
-            (*crate::os::OS.borrow(cs).borrow_mut().unwrap()).get_switch_pair();
-        pair = Some((prev_task, next_task));
+
+    let pair = interrupt::free(|cs| unsafe {
+        (*crate::os::OS.borrow(cs).borrow_mut().unwrap()).get_switch_pair()
     });
+
+    if pair.is_none() {
+        return;
+    }
+
     let (prev_task, next_task) = pair.unwrap();
+
+    if prev_task.state == crate::task::TaskState::Running {
+        prev_task.state = crate::task::TaskState::Enabled;
+    }
+    next_task.state = crate::task::TaskState::Running;
+
     crate::asm::do_context_switch(prev_task, next_task, lr);
 }
 

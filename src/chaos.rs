@@ -21,11 +21,11 @@ impl<S: Scheduler<N>, const N: usize> Os for ChaOS<S, N> {
         );
     }
 
-    fn get_switch_pair(&mut self) -> (&mut task::Task, &task::Task) {
+    fn get_switch_pair(&mut self) -> Option<(&mut task::Task, &mut task::Task)> {
         self.scheduler.get_switch_pair()
     }
 
-    fn get_initial_task_regs(&self) -> (*const u32, u32, u32) {
+    fn get_initial_task_regs(&mut self) -> Option<(*const u32, u32, u32)> {
         self.scheduler.get_initial_task_regs()
     }
 }

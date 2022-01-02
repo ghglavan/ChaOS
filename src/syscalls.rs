@@ -28,11 +28,17 @@ impl From<u8> for Syscalls {
 }
 
 fn handle_setup_call() {
-    let mut task_regs = (0 as *const u32, 0, 0);
-    interrupt::free(|cs| unsafe {
+    let mut task_regs = interrupt::free(|cs| unsafe {
         (*OS.borrow(cs).borrow_mut().unwrap()).reset_timer();
-        task_regs = (*OS.borrow(cs).borrow_mut().unwrap()).get_initial_task_regs();
+        (*OS.borrow(cs).borrow_mut().unwrap()).get_initial_task_regs()
     });
+
+    if task_regs.is_none() {
+        return;
+    }
+
+    let task_regs = task_regs.unwrap();
+
     let (psp, ctrl, exc_return) = task_regs;
     asm::do_setup(psp, ctrl, exc_return);
 }

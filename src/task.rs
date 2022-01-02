@@ -1,4 +1,4 @@
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
 pub enum TaskState {
     // the task is currently running
@@ -70,7 +70,7 @@ impl Task {
             *exc_return = 0xFFFFFFFD;
 
             task.stack_addr = task_stack_addr.offset(-18) as u32;
-            task.stack_size = old_stack_addr - task.stack_addr;
+            task.stack_size = task.stack_addr - old_stack_addr;
         }
 
         task

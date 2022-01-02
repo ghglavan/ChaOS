@@ -1,35 +1,5 @@
 use crate::task;
 
-// pub mod exceptions {
-//     use cortex_m::interrupt;
-
-//     #[no_mangle]
-//     #[inline(always)]
-//     pub unsafe extern "C" fn do_pendsv_exception() {
-//         let lr = crate::asm::get_lr();
-//         let mut pair = None;
-//         interrupt::free(|cs| {
-//             unsafe {
-//                 let (prev_task, next_task) = (*crate::os::OS.borrow(cs).borrow_mut().unwrap()).get_switch_pair();
-//                 pair = Some((prev_task, next_task));
-//             }
-//         });
-//         let (prev_task, next_task) = pair.unwrap();
-//         crate::asm::do_context_switch(prev_task, next_task, lr);
-//     }
-
-//     global_asm!(r#"
-//     .section txt
-//     .global PendSV
-//     foo:
-//         bl do_pendsv_exception
-//     "#);
-// }
-
-// extern "C" {
-//     fn PendSV();
-// }
-
 #[inline(always)]
 pub fn do_context_switch(prev_task: &mut task::Task, next_task: &task::Task, lr: u32) {
     unsafe {
@@ -42,11 +12,11 @@ pub fn do_context_switch(prev_task: &mut task::Task, next_task: &task::Task, lr:
             "mrs       r3, control",
             "stmdb     r0!, {{r2-r11}}",
             "ldmia     r1!, {{r2-r11}}",
+            "mov       lr, r2",
+            "msr       control, r3",
             "tst       lr, #0x10",
             "it        eq",
             "vldmiaeq  r1!, {{s16-s31}}",
-            "mov       lr, r2",
-            "msr       control, r3",
             "isb",
             "pop       {{r3}}",
             "msr       psp, r1",
